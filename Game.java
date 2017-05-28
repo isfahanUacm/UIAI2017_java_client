@@ -11,7 +11,7 @@ public class Game {
     private String msg_send, msg_recieved, server_address, teamname;
     private int sock, server_port, myinhandcheckernum, oppinhandcheckernum, cycle;
     private boolean dooz;
-    private DataOutputStream os = null;
+    private BufferedWriter os = null;
     private BufferedReader is = null;
 
     public Game() {
@@ -37,7 +37,7 @@ public class Game {
     public boolean start_client() {
         try {
             Socket myClient = new Socket(server_address, server_port);
-            os = new DataOutputStream(myClient.getOutputStream());
+            os = new BufferedWriter(new OutputStreamWriter(myClient.getOutputStream()));
             is = new BufferedReader(new InputStreamReader(myClient.getInputStream()));
         } catch (UnknownHostException e) {
             System.err.println("Don't know about host: hostname");
@@ -51,13 +51,17 @@ public class Game {
 
     public void start() {
         try {
-            os.write(("REGISTER " + teamname + '\n').getBytes());
+            os.write("REGISTER " + teamname + '\n');
+            os.flush();
             String responseLine;
             while ((responseLine = is.readLine()) != null) {
                 msg_send = "";
+                if(responseLine.equals("FINISH"))
+                    break;
                 play_round(responseLine);
                 msg_send += "\n";
-                os.write(msg_send.getBytes());
+                os.write(msg_send);
+                os.flush();
             }
         } catch (SocketException e) {
             System.out.println("Connection closed");
@@ -73,7 +77,7 @@ public class Game {
         }
     }
 
-    public void play_round(String message) {
+    private void play_round(String message) throws IOException {
         dooz = false;
         board.update(message.substring(0, 47));
         message = message.substring(48);
@@ -89,6 +93,7 @@ public class Game {
 
         if (dooz)
             Pop_strategy.execte(this);
+        os.flush();
     }
 
     public int getMyinhandcheckernum() {
@@ -101,23 +106,28 @@ public class Game {
 
     public void put(Pos p) {
         msg_send = "put " + p.getX() + "," + p.getY();
+        board.get_cell(p).set_checker(p.getX(),p.getY(),'m');
+        update_cell_arrays();
         check_dooz(p);
     }
 
     public void pop(Checker c) {
         msg_send += " " + c.get_pos().getX() + "," + c.get_pos().getY();
+        board.get_cell(c.get_pos()).set_checker(null);
     }
 
     public void move(Checker c, Pos newpos) {
         msg_send = "mov " + c.get_pos().getX() + "," + c.get_pos().getY() + "," + newpos.getX() + "," + newpos.getY();
         board.get_cell(c.get_pos()).set_checker(null);
+        board.get_cell(newpos).set_checker(newpos.getX(),newpos.getY(),'m');
+        update_cell_arrays();
         check_dooz(newpos);
     }
 
-    void check_dooz(Pos p) {
+    private void check_dooz(Pos p) {
         boolean status = true;
         for (int j = 0; j < 3; j++)
-            if (board.get_cells().get(p.getX()).get(j).get_checker() == null || !board.get_cells().get(p.getX()).get(j).get_checker().isMyChecker()) {
+            if (board.get_cell(p.getX(),j).get_checker() == null || !board.get_cell(p.getX(),j).get_checker().isMyChecker()) {
                 status = false;
                 break;
             }
@@ -140,17 +150,36 @@ public class Game {
             for (int i = 0; i < 3; i++)
                 if (board.get_cell((p.getX() - i + 8) % 8, p.getY()).get_checker() == null || !board.get_cell((p.getX() - i + 8) % 8, p.getY()).get_checker().isMyChecker())
                     status = false;
-        } else {
+        }
+        else
+        {
             for (int i = -1; i < 2; i++)
                 if (board.get_cell((p.getX() + i) % 8, p.getY()).get_checker() == null || !board.get_cell((p.getX() + i) % 8, p.getY()).get_checker().isMyChecker())
-                {
                     status = false;
-                }
 
         }
-        if (status) {
+        if (status)
+        {
             dooz = true;
         }
+    }
+
+    private void update_cell_arrays()
+    {
+        board.get_emptyCells().clear();
+        board.get_myCells().clear();
+        board.get_oppCells().clear();
+
+        for(int i=0;i<8;i++)
+            for(int j=0;j<3;j++)
+            {
+                if(board.get_cell(i,j).get_checker()==null)
+                    board.get_emptyCells().add(board.get_cell(i,j));
+                else if(board.get_cell(i,j).get_checker().isMyChecker())
+                    board.get_myCells().add(board.get_cell(i,j));
+                else
+                    board.get_oppCells().add(board.get_cell(i,j));
+            }
     }
 
     public int get_cycle() {

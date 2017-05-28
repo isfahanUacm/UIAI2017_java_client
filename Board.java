@@ -33,6 +33,7 @@ public class Board {
         mycells.clear();
         oppcells.clear();
         emptycells.clear();
+
         for(int i=0;i<8;i++)
         {
             for(int j=0;j<3;j++)
